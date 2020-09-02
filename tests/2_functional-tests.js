@@ -47,18 +47,24 @@ suite('Functional Tests', () => {
     // Pressing the "Clear" button clears the sudoku 
     // grid and the text area
     test('Function clearInput()', done => {
+      const emptyGrid = '.................................................................................'
       sudoku.resetGrid();
       Array.from(document.querySelectorAll('td input')).forEach(cell=>{assert.equal(cell.value,''); });
-      assert.equal(document.getElementById('text-input').value,'');
+      assert.equal(document.getElementById('text-input').value,emptyGrid);
       done();
     });
     
     // Pressing the "Solve" button solves the puzzle and
     // fills in the grid with the solution
-    /*test('Function showSolution(solve(input))', done => {
-
-      // done();
-    });*/
+    test('Function showSolution(solve(input))', done => {
+      sudoku.htmlUpdates=true
+      const input = '..9..5.1.85.4....2432......1...69.83.9.....6.62.71...9......1945....4.37.4.3..6..';
+      const solution = '769235418851496372432178956174569283395842761628713549283657194516924837947381625'
+      sudoku.updateFromTextArea(input)
+      sudoku.showSolution()
+      Array.from(document.querySelectorAll('td input')).forEach((cell,idx)=>{assert.equal(cell.value,parseInt(solution[idx]))})
+      done();
+    });
   });
 });
 

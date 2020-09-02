@@ -4,16 +4,21 @@ function SudokuPuzzle(){
   let grid = [];
 	const rows = ['A','B','C','D','E','F','G','H','I'];
 	const columns = [1,2,3,4,5,6,7,8,9];
-  const updateHTML = (valid,reset=false) =>{
+  const updateHTML = (valid,errorStr="",reset=false) =>{
     if (valid)
     {
+      document.getElementById('error-msg').innerHTML = ""
       let gridString = reset ?  '' : this.getGrid().map(g=>{return (g.value) ? g.value : '.'}).join('');
       document.getElementById('text-input').value = gridString;
       this.getGrid().forEach((el,ind)=>{document.querySelectorAll('td input')[ind].value = el.value});
-    }     
+    } else
+    {
+      console.log("string not valid")
+      document.getElementById('error-msg').innerHTML = "Error: Expected puzzle to be 81 characters long."
+    }
   }
   const updatePuzzleCell = (index,input) =>{
-    input === '.' ?  grid[index].value = '' : grid[index].value = input;
+    input === '.' ?  grid[index].value = '' : grid[index].value = parseInt(input);
     return this.getGrid()[index];
   }
   const populatePossNumbers = (cellType,cell,possArr=[])=>{
@@ -53,38 +58,54 @@ function SudokuPuzzle(){
     }
     return returnArr
 	} 
-  const solve = (cells,currPos,prevPos) =>{
-    //if prevPos && prevNum are both null
-    let returnVal
-    if (!prevPos)
-    {
-      //the first run will be the whole grid
-      //run the populate possibles method to narrow down potential options
-      cells.forEach(c=>{c.possibleValues = populatePossNumbers("row",c)})
-      //get all empty cells
-      let emptyCells = cells.filter(e=>{if(e.value === ''){ return e}})  
-      emptyCells[currPos].value = emptyCells.possibleValues[currPos].pop()
-      const newPos = currPos++
-      returnVal = solve(emptyCells,currPos+1,currPos)
-    }
-    else
-    {
-      //check if there are no empty values in the grid.
-          //if there are none, return the puzzle
-          //check there are still possibilities contained in the grid:
-            //if is 0
-              //then decrement currPos, decrement PrevPos
-              //call function to execute again
-              //if there are not and the grid has empty values, return the grid.  
-            //if it is > 0 pop the number from possVals into val
-              //test the validity - is the number contained in another grid cell from the same block having the same row, grid or block?
-              //let testVal = grid.filter(el=>{if ((el.row === grid[0].row || el.column === grid[0].column || el.block === grid[0].block) && el.value === 7 ){return el }}).length
-              //testval > 0
-                //empty the cells value.  call function - provide the same array of empty objects, same currPos, same prevPos.
-                //valid - increment currPos, passs currPos as prevPos, call function to move onto the next cell
-    }   
+  const validateCell = (cell,val) =>{
+    return (grid.filter(el=>{if (el.cell !== cell.cell && (el.row === cell.row || el.column === cell.column || el.block === cell.block) && el.value === val ){return el }}).length === 0) ? true : false
   }
-  this.htmlUpdates = true;
+  const solve = (cells,currPos,prevPos) =>{
+    let emptyCells
+    if (grid.filter(e=>{if(e.value !== ''){ return e }}).length === 81){
+      let validation = true
+      grid.forEach(cell=>{if (!validateCell(cell,cell.value)){validation = false }})
+      return  (validation)? grid : {error:"grid was not valid"} 
+    }
+    if (prevPos === null)
+    {
+      let validation = true
+      cells.forEach(cell=>{if (cell.value !== '' && !validateCell(cell,cell.value)){console.log("validation failed");validation = false }})
+      if (!validation){return {error:"grid was not valid"} }
+      cells.forEach(c=>{c.possibleValues = populatePossNumbers("row",c)})
+      emptyCells = cells.filter(e=>{if(e.value === ''){ return e}})
+      const possVal = emptyCells[currPos].possibleValues.pop();
+      if (validateCell(emptyCells[currPos],possVal)){
+        emptyCells[currPos].value = possVal
+        return solve(emptyCells,currPos+1,currPos) 
+      } else {
+         emptyCells[currPos].blacklist.push(possVal)
+         return solve(emptyCells,currPos,currPos)  
+      }
+    } 
+    if (cells[currPos].possibleValues.length === 0 && cells[currPos].value === '')
+    {
+      cells[currPos].possibleValues = cells[currPos].blacklist
+      cells[currPos].blacklist = []
+      cells[prevPos].blacklist.push(cells[prevPos].value )
+      cells[prevPos].value = '' 
+      return solve(cells,prevPos,prevPos-1) 
+    }
+    if (cells[currPos].possibleValues.length > 0 && cells[currPos].value === '' && prevPos !== null)
+    {
+      const possVal = cells[currPos].possibleValues.pop();
+      if (validateCell(cells[currPos],possVal)){
+        cells[currPos].value = possVal
+        return solve(cells,currPos+1,currPos)
+      } else {
+         cells[currPos].blacklist.push(possVal)
+         return solve(cells,currPos,prevPos)  
+      }
+    }
+    return grid
+  }
+  this.htmlUpdates = true; 
   this.populateGrid = (gridValues) =>{
     let i = 0;
     let gridVal;
@@ -106,7 +127,7 @@ function SudokuPuzzle(){
         if (rowInd < 3 && colInd < 3){block = 1}			
         gridVal  = (parseInt(gameNumbers[i])) ? parseInt(gameNumbers[i]) : '';
         objName = `${row}${column}`
-        var gridObj = {cell:objName,value:gridVal,possibleValues:[],block:block,row:rowInd+1,column:colInd+1}
+        var gridObj = {cell:objName,value:gridVal,possibleValues:[],blacklist:[],block:block,row:rowInd+1,column:colInd+1}
         grid.push(gridObj);
         ++i;
         })
@@ -131,6 +152,7 @@ function SudokuPuzzle(){
         returnVal = validInput;
       } 
     } else{
+      console.log("string too big or small")
       returnVal = updateHTML(false);
     }
     return returnVal   
@@ -153,15 +175,8 @@ function SudokuPuzzle(){
     return this.htmlUpdates ? updateHTML(true,true) : this.getGrid();
   }
   this.showSolution = () =>{
-    //backup the grid to this point.  We'll attempt a shortcut solution and also a more long winded brute force should that not produce a solution
-    const gridBackup = JSON.parse(JSON.stringify(grid))
-    //get an object representing cells from the grid with empty values
-    //pass the index of 0 for the starting point
-    //pass nothing as the prevPos
-    //pass nothing for the prevNum
-    //run the puzzle solver method
-    //depending on setting of htmlUpdates, populate the solution on the page
-    //or return the grid as an object otherwise
+    let returnVal = solve(grid,0,null)
+    return this.htmlUpdates ? updateHTML(true) : returnVal.error ? returnVal : this.getGrid();
   }
 }
 document.addEventListener('DOMContentLoaded', () => {
@@ -171,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
   textArea.addEventListener('input',(e)=>{sudoku.updateFromTextArea(e.srcElement.value);});
   document.querySelectorAll('td input').forEach((el,ind)=>{el.addEventListener('input',(e)=>{sudoku.updateFromGrid(ind,e.data)})})
   document.getElementById('clear-button').addEventListener('click',(e)=>{sudoku.resetGrid()});
+  document.getElementById('solve-button').addEventListener('click',(e)=>{sudoku.showSolution()})
 });
 
 
@@ -184,3 +200,7 @@ try {
     SudokuPuzzle: SudokuPuzzle
   }
 } catch (e) {}
+
+
+
+
